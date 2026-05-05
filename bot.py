@@ -11,7 +11,7 @@ from datetime import datetime
 # CONFIG
 # =======================
 TOKEN = os.getenv("TOKEN")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "ba2onekral")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "ba2onereis")
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecret")
 
 BASVURU_KANAL = 1499919581253472266
