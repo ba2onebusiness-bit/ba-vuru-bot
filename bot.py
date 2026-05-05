@@ -28,10 +28,11 @@ def run_web():
 threading.Thread(target=run_web).start()
 
 # :pencil: FORM
-class BasvuruModal(discord.ui.Modal, title="HOOWERS Başvuru"):
+class BasvuruModal(discord.ui.Modal, title="CADEİM Başvuru"):
     isim = discord.ui.TextInput(label="İsmin")
     yas = discord.ui.TextInput(label="Yaşın")
-    deneyim = discord.ui.TextInput(label="Deneyimin", style=discord.TextStyle.paragraph)
+    deneyim = discord.ui.TextInput(label="Hangi Ekiplerde Oynadın", style=discord.TextStyle.paragraph)
+    embed.add_field(name="Youtube video linki (mdrp)", value=self.yas.value, inline=False)
 
     async def on_submit(self, interaction: discord.Interaction):
         kanal = bot.get_channel(BASVURU_KANAL)
