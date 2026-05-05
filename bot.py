@@ -6,9 +6,12 @@ import os
 import sqlite3
 
 # =======================
-# TOKEN
+# TOKEN CHECK (CRITICAL FIX)
 # =======================
 TOKEN = os.getenv("TOKEN")
+
+if not TOKEN:
+    raise Exception("TOKEN bulunamadı! Render env kontrol et.")
 
 # =======================
 # INTENTS
@@ -20,14 +23,14 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # =======================
-# AYARLAR
+# CONFIG
 # =======================
 BASVURU_KANAL = 123456789012345678
 LOG_KANAL = 123456789012345678
 KABUL_ROL_ID = 123456789012345678
 
 # =======================
-# DATABASE
+# DATABASE (SAFE MODE)
 # =======================
 conn = sqlite3.connect("basvurular.db", check_same_thread=False)
 cursor = conn.cursor()
@@ -52,7 +55,7 @@ def save_app(user_id, isim, yas, deneyim, youtube):
     conn.commit()
 
 # =======================
-# FLASK
+# FLASK (SAFE THREAD)
 # =======================
 app = Flask(__name__)
 
@@ -62,31 +65,32 @@ def home():
 
 def run_web():
     port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 threading.Thread(target=run_web, daemon=True).start()
 
 # =======================
-# TICKET CLOSE BUTTON
+# TICKET CLOSE (FIXED)
 # =======================
 class TicketCloseView(discord.ui.View):
 
     @discord.ui.button(label="Ticket Kapat", style=discord.ButtonStyle.danger)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
 
-        await interaction.response.send_message("⛔ Ticket 5 saniye içinde kapanıyor...", ephemeral=True)
+        await interaction.response.send_message("⛔ Ticket kapanıyor...", ephemeral=True)
+
         await discord.utils.sleep_until(discord.utils.utcnow())
 
         await interaction.channel.delete()
 
 # =======================
-# BAŞVURU ACTION
+# ACTION VIEW
 # =======================
 class BasvuruActionView(discord.ui.View):
 
     def __init__(self, user_id):
-        super().__init__(timeout=None)
-        self.user_id = user_id
+        super().__init__()
+        self.user_id = int(user_id)
 
     @discord.ui.button(label="Kabul Et", style=discord.ButtonStyle.success)
     async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -103,7 +107,7 @@ class BasvuruActionView(discord.ui.View):
         except:
             pass
 
-        await interaction.message.edit(content="✅ Başvuru Kabul Edildi", view=None)
+        await interaction.message.edit(content="✅ KABUL EDİLDİ", view=None)
 
     @discord.ui.button(label="Reddet", style=discord.ButtonStyle.danger)
     async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -111,22 +115,23 @@ class BasvuruActionView(discord.ui.View):
         guild = interaction.guild
         user = guild.get_member(self.user_id)
 
-        try:
-            await user.send("❌ Başvurun reddedildi.")
-        except:
-            pass
+        if user:
+            try:
+                await user.send("❌ Başvurun reddedildi.")
+            except:
+                pass
 
-        await interaction.message.edit(content="❌ Başvuru Reddedildi", view=None)
+        await interaction.message.edit(content="❌ REDDEDİLDİ", view=None)
 
 # =======================
-# BAŞVURU MODAL
+# MODAL
 # =======================
 class BasvuruModal(discord.ui.Modal, title="Başvuru Formu"):
 
     isim = discord.ui.TextInput(label="İsim")
     yas = discord.ui.TextInput(label="Yaş")
     deneyim = discord.ui.TextInput(label="Deneyim", style=discord.TextStyle.paragraph)
-    youtube = discord.ui.TextInput(label="YouTube Link", required=False)
+    youtube = discord.ui.TextInput(label="YouTube", required=False)
 
     async def on_submit(self, interaction: discord.Interaction):
 
@@ -140,24 +145,18 @@ class BasvuruModal(discord.ui.Modal, title="Başvuru Formu"):
 
         kanal = bot.get_channel(BASVURU_KANAL)
 
-        embed = discord.Embed(
-            title="📩 Yeni Başvuru",
-            color=0x2ecc71
-        )
-
+        embed = discord.Embed(title="📩 Yeni Başvuru", color=0x2ecc71)
         embed.add_field(name="İsim", value=self.isim.value, inline=False)
         embed.add_field(name="Yaş", value=self.yas.value, inline=False)
         embed.add_field(name="Deneyim", value=self.deneyim.value, inline=False)
         embed.add_field(name="YouTube", value=self.youtube.value or "Yok", inline=False)
 
-        embed.set_footer(text=f"{interaction.user} | {interaction.user.id}")
-
         await kanal.send(embed=embed, view=BasvuruActionView(interaction.user.id))
 
-        await interaction.response.send_message("✅ Başvurun gönderildi!", ephemeral=True)
+        await interaction.response.send_message("Gönderildi", ephemeral=True)
 
 # =======================
-# BAŞVURU BUTTON
+# BUTTONS
 # =======================
 class BasvuruView(discord.ui.View):
 
@@ -165,9 +164,6 @@ class BasvuruView(discord.ui.View):
     async def btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(BasvuruModal())
 
-# =======================
-# TICKET SYSTEM
-# =======================
 class TicketView(discord.ui.View):
 
     @discord.ui.button(label="Ticket Aç", style=discord.ButtonStyle.primary)
@@ -181,43 +177,14 @@ class TicketView(discord.ui.View):
             guild.me: discord.PermissionOverwrite(read_messages=True)
         }
 
-        channel = await guild.create_text_channel(
+        ch = await guild.create_text_channel(
             name=f"ticket-{interaction.user.name}",
             overwrites=overwrites
         )
 
-        await channel.send(
-            f"🎫 Ticket açıldı {interaction.user.mention}",
-            view=TicketCloseView()
-        )
+        await ch.send("🎫 Ticket açıldı", view=TicketCloseView())
 
-        await interaction.response.send_message(f"Ticket açıldı: {channel.mention}", ephemeral=True)
-
-# =======================
-# COMMANDS
-# =======================
-@bot.command()
-async def basvuru(ctx):
-    await ctx.message.delete()
-
-    embed = discord.Embed(
-        title="📢 Başvuru Sistemi",
-        description="Başvurmak için butona tıkla",
-        color=0x2f3136
-    )
-
-    await ctx.send(embed=embed, view=BasvuruView())
-
-@bot.command()
-async def ticket(ctx):
-
-    embed = discord.Embed(
-        title="🎫 Ticket Sistemi",
-        description="Destek için ticket aç",
-        color=0x2f3136
-    )
-
-    await ctx.send(embed=embed, view=TicketView())
+        await interaction.response.send_message(ch.mention, ephemeral=True)
 
 # =======================
 # READY
