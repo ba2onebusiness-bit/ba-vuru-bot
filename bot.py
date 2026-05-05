@@ -39,7 +39,8 @@ class BasvuruModal(discord.ui.Modal, title="HOOWERS Başvuru"):
         embed = discord.Embed(title=":envelope_with_arrow: Yeni Başvuru", color=0x2ecc71)
         embed.add_field(name=":bust_in_silhouette: İsim", value=self.isim.value, inline=False)
         embed.add_field(name=":birthday: Yaş", value=self.yas.value, inline=False)
-        embed.add_field(name=":books: Deneyim", value=self.deneyim.value, inline=False)
+        embed.add_field(name=":books: Hangi Ekiplerde oynadın", value=self.deneyim.value, inline=False)
+        embed.add_field(name="Youtube video linki (mdrp)", value=self.yas.value, inline=False)
         embed.set_footer(text=f"{interaction.user} | {interaction.user.id}")
 
         await kanal.send(embed=embed)
@@ -64,7 +65,7 @@ async def basvurukur(ctx):
     )
 
     embed.set_image(
-        url="https://media.discordapp.net/attachments/777573115177336852/1499923963696906371/92425a4c-2a54-4acb-a58a-d91252053326.png"
+        url="https://cdn.discordapp.com/attachments/777573115177336852/1501328247219294208/c0eaa56ace2a830ccea8e17a3bde2aee.jpg?ex=69fbac63&is=69fa5ae3&hm=c2260bae740bf429bf3d358d96b936ca57708604eccab2eb5ecc8ba1196a3304&animated=true"
     )
 
     embed.set_footer(text="Başvuru sistemi")
