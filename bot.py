@@ -1,44 +1,34 @@
 import discord
 from discord.ext import commands
-from discord import app_commands
 import sqlite3
 import os
-import io
 
 # =======================
 # CONFIG
 # =======================
 TOKEN = os.getenv("TOKEN")
 
-ADMIN_ROLE_ID = 1234567890  # ← kendi admin rol ID
-GUILD_ID = 1234567890       # ← server ID
+ADMIN_ROLE_ID = 0  # Admin rol ID koymak istersen buraya yaz
 
-BASVURU_KANAL = 1234567890
-ANNOUNCE_KANAL = 1234567890
-LOG_KANAL = 1234567890
+BASVURU_KANAL = 1499919581253472266
+ANNOUNCE_KANAL = 1461791063361454291
 
-KABUL_ROL_ID_1 = 1234567890
-KABUL_ROL_ID_2 = 1234567890
+KABUL_ROL_ID_1 = 1461791062078001183
+KABUL_ROL_ID_2 = 1461791062027665509
 
 # =======================
-# BOT
+# BOT SETUP
 # =======================
 intents = discord.Intents.default()
 intents.members = True
+intents.message_content = False
 
-class MyBot(commands.Bot):
-    def __init__(self):
-        super().__init__(command_prefix="!", intents=intents)
-
-    async def setup_hook(self):
-        await self.tree.sync(guild=discord.Object(id=GUILD_ID))
-
-bot = MyBot()
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 # =======================
 # DATABASE
 # =======================
-conn = sqlite3.connect("data.db")
+conn = sqlite3.connect("data.db", check_same_thread=False)
 cursor = conn.cursor()
 
 cursor.execute("""
@@ -48,197 +38,340 @@ CREATE TABLE IF NOT EXISTS applications (
     aktiflik TEXT,
     yas TEXT,
     pc TEXT,
-    fivem TEXT
+    olusumlar TEXT,
+    fivem TEXT,
+    map TEXT,
+    referans TEXT,
+    pov TEXT
 )
 """)
 conn.commit()
 
+
 def save_app(data):
     cursor.execute("""
-    INSERT INTO applications (user_id, aktiflik, yas, pc, fivem)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO applications (
+        user_id, aktiflik, yas, pc, olusumlar, fivem, map, referans, pov
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, data)
     conn.commit()
 
-# =======================
-# CHECK ADMIN
-# =======================
-def is_admin(interaction: discord.Interaction):
-    return any(role.id == ADMIN_ROLE_ID for role in interaction.user.roles)
 
 # =======================
-# TRANSCRIPT
-# =======================
-async def create_transcript(channel: discord.TextChannel):
-    msgs = []
-    async for m in channel.history(limit=None, oldest_first=True):
-        content = m.content or ""
-        msgs.append(f"{m.author}: {content}")
-
-    html = "<html><body style='background:#2c2f33;color:white'>"
-    html += "<h2>Ticket Transcript</h2><hr>"
-
-    for m in msgs:
-        html += f"<p>{m}</p><hr>"
-
-    html += "</body></html>"
-
-    file = io.BytesIO(html.encode())
-    return discord.File(file, filename=f"{channel.name}.html")
-
-# =======================
-# ACTION VIEW
+# KABUL / RED VIEW
 # =======================
 class ActionView(discord.ui.View):
-    def __init__(self, user_id):
-        super().__init__()
+    def __init__(self, user_id: int):
+        super().__init__(timeout=None)
         self.user_id = int(user_id)
 
-    async def get_user(self, guild):
-        try:
-            return await guild.fetch_member(self.user_id)
-        except:
-            return guild.get_member(self.user_id)
+    async def get_user(self, guild: discord.Guild):
+        member = guild.get_member(self.user_id)
 
-    @discord.ui.button(label="KABUL", style=discord.ButtonStyle.success)
+        if member is None:
+            try:
+                member = await guild.fetch_member(self.user_id)
+            except discord.NotFound:
+                return None
+
+        return member
+
+    @discord.ui.button(label="Kabul Et", style=discord.ButtonStyle.success)
     async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
 
-        user = await self.get_user(interaction.guild)
-        if not user:
-            return
+        if guild is None:
+            return await interaction.response.send_message(
+                "❌ Bu işlem sadece sunucuda kullanılabilir.",
+                ephemeral=True
+            )
 
-        roles = [
-            interaction.guild.get_role(KABUL_ROL_ID_1),
-            interaction.guild.get_role(KABUL_ROL_ID_2)
-        ]
+        user = await self.get_user(guild)
 
-        await user.add_roles(*[r for r in roles if r])
+        if user is None:
+            return await interaction.response.send_message(
+                "❌ Kullanıcı sunucuda bulunamadı.",
+                ephemeral=True
+            )
+
+        roles = []
+
+        for role_id in [KABUL_ROL_ID_1, KABUL_ROL_ID_2]:
+            role = guild.get_role(role_id)
+            if role:
+                roles.append(role)
+
+        if roles:
+            try:
+                await user.add_roles(*roles, reason="Başvuru kabul edildi")
+            except discord.Forbidden:
+                return await interaction.response.send_message(
+                    "❌ Rol veremedim. Botun rolü, vereceği rollerden yukarıda olmalı.",
+                    ephemeral=True
+                )
 
         try:
-            await user.send("🎉 Başvurun kabul edildi!")
-        except:
+            await user.send("🎉 Tebrikler! Başvurun kabul edildi.")
+        except discord.Forbidden:
             pass
 
-        ch = bot.get_channel(ANNOUNCE_KANAL)
-        await ch.send(f"✅ {user.mention} BAŞVURUSU KABUL EDİLDİ")
+        announce_channel = bot.get_channel(ANNOUNCE_KANAL)
 
-        await interaction.message.edit(content="KABUL EDİLDİ", view=None)
+        if announce_channel:
+            await announce_channel.send(f"✅ {user.mention} başvurusu kabul edildi 🎉")
 
-    @discord.ui.button(label="RED", style=discord.ButtonStyle.danger)
+        await interaction.message.edit(content="✅ **BAŞVURU KABUL EDİLDİ**", embed=interaction.message.embeds[0], view=None)
+
+        await interaction.response.send_message(
+            "✅ Başvuru kabul edildi.",
+            ephemeral=True
+        )
+
+    @discord.ui.button(label="Reddet", style=discord.ButtonStyle.danger)
     async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
 
-        user = await self.get_user(interaction.guild)
-        if not user:
-            return
+        if guild is None:
+            return await interaction.response.send_message(
+                "❌ Bu işlem sadece sunucuda kullanılabilir.",
+                ephemeral=True
+            )
+
+        user = await self.get_user(guild)
+
+        if user is None:
+            return await interaction.response.send_message(
+                "❌ Kullanıcı sunucuda bulunamadı.",
+                ephemeral=True
+            )
 
         try:
-            await user.send("❌ Reddedildin.")
-        except:
+            await user.send("❌ Başvurun reddedildi.")
+        except discord.Forbidden:
             pass
 
-        ch = bot.get_channel(ANNOUNCE_KANAL)
-        await ch.send(f"❌ {user.mention} BAŞVURUSU REDDEDİLDİ")
+        announce_channel = bot.get_channel(ANNOUNCE_KANAL)
 
-        await interaction.message.edit(content="REDDEDİLDİ", view=None)
+        if announce_channel:
+            await announce_channel.send(f"❌ {user.mention} başvurusu reddedildi.")
+
+        await interaction.message.edit(content="❌ **BAŞVURU REDDEDİLDİ**", embed=interaction.message.embeds[0], view=None)
+
+        await interaction.response.send_message(
+            "❌ Başvuru reddedildi.",
+            ephemeral=True
+        )
+
 
 # =======================
-# MODAL
+# 2. MODAL
 # =======================
-class BasvuruModal(discord.ui.Modal, title="Başvuru Formu"):
+class BasvuruModal2(discord.ui.Modal, title="MDRP Başvuru - 2. Aşama"):
+    def __init__(self, first_data: dict):
+        super().__init__()
+        self.first_data = first_data
 
-    aktiflik = discord.ui.TextInput(label="Günlük aktiflik")
-    yas = discord.ui.TextInput(label="Yaş")
-    pc = discord.ui.TextInput(label="PC")
-    fivem = discord.ui.TextInput(label="FiveM saat")
+    fivem = discord.ui.TextInput(
+        label="FiveM saatin kaç?",
+        placeholder="Örnek: 1500 saat",
+        required=True,
+        max_length=100
+    )
+
+    map_bilgisi = discord.ui.TextInput(
+        label="Map bilgin nasıl?",
+        placeholder="Örnek: İyi / Orta / Çok iyi",
+        required=True,
+        max_length=300
+    )
+
+    referans = discord.ui.TextInput(
+        label="Referansın var mı?",
+        placeholder="Varsa isim yaz, yoksa 'Yok' yaz",
+        required=True,
+        max_length=300
+    )
+
+    pov = discord.ui.TextInput(
+        label="POV / Video linki",
+        placeholder="Varsa link at, yoksa 'Yok' yaz",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=1000
+    )
 
     async def on_submit(self, interaction: discord.Interaction):
+        data = {
+            **self.first_data,
+            "fivem": self.fivem.value,
+            "map": self.map_bilgisi.value,
+            "referans": self.referans.value,
+            "pov": self.pov.value
+        }
 
         save_app((
             str(interaction.user.id),
-            self.aktiflik.value,
-            self.yas.value,
-            self.pc.value,
-            self.fivem.value
+            data["aktiflik"],
+            data["yas"],
+            data["pc"],
+            data["olusumlar"],
+            data["fivem"],
+            data["map"],
+            data["referans"],
+            data["pov"]
         ))
 
-        ch = bot.get_channel(BASVURU_KANAL)
+        channel = bot.get_channel(BASVURU_KANAL)
 
-        embed = discord.Embed(title="Yeni Başvuru", color=0x00ff00)
-        embed.add_field(name="Aktiflik", value=self.aktiflik.value)
-        embed.add_field(name="Yaş", value=self.yas.value)
-        embed.add_field(name="PC", value=self.pc.value)
-        embed.add_field(name="FiveM", value=self.fivem.value)
+        if channel is None:
+            return await interaction.response.send_message(
+                "❌ Başvuru kanalı bulunamadı. Kanal ID'sini kontrol et.",
+                ephemeral=True
+            )
 
-        await ch.send(embed=embed, view=ActionView(interaction.user.id))
-
-        await interaction.response.send_message("Gönderildi", ephemeral=True)
-
-# =======================
-# TICKET
-# =======================
-class TicketView(discord.ui.View):
-
-    @discord.ui.button(label="Ticket Aç", style=discord.ButtonStyle.primary)
-    async def open(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        overwrites = {
-            interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-            interaction.guild.me: discord.PermissionOverwrite(view_channel=True)
-        }
-
-        ch = await interaction.guild.create_text_channel(
-            name=f"ticket-{interaction.user.name}",
-            overwrites=overwrites
+        embed = discord.Embed(
+            title="📩 Yeni MDRP Başvurusu",
+            description=f"Başvuru sahibi: {interaction.user.mention}",
+            color=0x2ecc71
         )
 
-        await ch.send("Ticket açıldı")
+        embed.add_field(name="👤 Kullanıcı", value=f"{interaction.user} / `{interaction.user.id}`", inline=False)
+        embed.add_field(name="⏰ Günlük Aktiflik", value=data["aktiflik"], inline=False)
+        embed.add_field(name="🎂 Yaş", value=data["yas"], inline=False)
+        embed.add_field(name="💻 PC Bilgisi", value=data["pc"], inline=False)
+        embed.add_field(name="👥 Önceki Oluşumlar", value=data["olusumlar"], inline=False)
+        embed.add_field(name="🎮 FiveM Saati", value=data["fivem"], inline=False)
+        embed.add_field(name="🗺️ Map Bilgisi", value=data["map"], inline=False)
+        embed.add_field(name="📌 Referans", value=data["referans"], inline=False)
+        embed.add_field(name="🎥 POV", value=data["pov"], inline=False)
 
-        await interaction.response.send_message(ch.mention, ephemeral=True)
+        embed.set_footer(text="Kabul veya red işlemi için aşağıdaki butonları kullan.")
 
-class TicketClose(discord.ui.View):
+        await channel.send(
+            embed=embed,
+            view=ActionView(interaction.user.id)
+        )
 
-    @discord.ui.button(label="Kapat", style=discord.ButtonStyle.danger)
-    async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message(
+            "✅ Başvurun başarıyla gönderildi.",
+            ephemeral=True
+        )
 
-        log = bot.get_channel(LOG_KANAL)
-        file = await create_transcript(interaction.channel)
-
-        await log.send(file=file)
-
-        await interaction.channel.delete()
 
 # =======================
-# SLASH COMMANDS
+# 1. MODAL
 # =======================
+class BasvuruModal1(discord.ui.Modal, title="MDRP Başvuru - 1. Aşama"):
+    aktiflik = discord.ui.TextInput(
+        label="Günlük aktifliğin kaç saat?",
+        placeholder="Örnek: Günde 5-6 saat aktifim",
+        required=True,
+        max_length=200
+    )
 
-@app_commands.command(name="basvuru")
-async def basvuru(interaction: discord.Interaction):
-    await interaction.response.send_modal(BasvuruModal())
+    yas = discord.ui.TextInput(
+        label="Yaşın kaç?",
+        placeholder="Örnek: 18",
+        required=True,
+        max_length=50
+    )
 
-@app_commands.command(name="basvuru-panel")
-async def panel(interaction: discord.Interaction):
+    pc = discord.ui.TextInput(
+        label="PC özelliklerin nasıl?",
+        placeholder="İşlemci, ekran kartı, RAM vb.",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=1000
+    )
 
-    if not is_admin(interaction):
-        return await interaction.response.send_message("Yetkin yok", ephemeral=True)
+    olusumlar = discord.ui.TextInput(
+        label="Daha önce bulunduğun oluşumlar",
+        placeholder="Varsa yaz, yoksa 'Yok' yaz",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=1000
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        first_data = {
+            "aktiflik": self.aktiflik.value,
+            "yas": self.yas.value,
+            "pc": self.pc.value,
+            "olusumlar": self.olusumlar.value
+        }
+
+        await interaction.response.send_modal(BasvuruModal2(first_data))
+
+
+# =======================
+# PANEL VIEW
+# =======================
+class PanelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Başvuru Yap", style=discord.ButtonStyle.primary, emoji="📩")
+    async def open_modal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(BasvuruModal1())
+
+
+# =======================
+# SLASH COMMAND
+# =======================
+@bot.tree.command(name="basvuru-panel", description="Başvuru panelini gönderir.")
+async def basvuru_panel(interaction: discord.Interaction):
+    if interaction.guild is None:
+        return await interaction.response.send_message(
+            "❌ Bu komut sadece sunucuda kullanılabilir.",
+            ephemeral=True
+        )
+
+    if ADMIN_ROLE_ID != 0:
+        if not any(role.id == ADMIN_ROLE_ID for role in interaction.user.roles):
+            return await interaction.response.send_message(
+                "❌ Bu komutu kullanmak için yetkin yok.",
+                ephemeral=True
+            )
 
     embed = discord.Embed(
-        title="Başvuru Panel",
-        description="Başvurmak için butona bas",
+        title="📩 MDRP Başvuru Sistemi",
+        description=(
+            "Başvuru yapmak için aşağıdaki butona tıkla.\n\n"
+            "Başvuru 2 aşamadan oluşur. Soruları eksiksiz doldurman gerekir."
+        ),
         color=0x2f3136
     )
 
-    await interaction.channel.send(embed=embed, view=TicketView())
-    await interaction.response.send_message("Panel kuruldu", ephemeral=True)
+    embed.set_footer(text="MDRP Başvuru Paneli")
 
-bot.tree.add_command(basvuru)
-bot.tree.add_command(panel)
+    await interaction.channel.send(
+        embed=embed,
+        view=PanelView()
+    )
+
+    await interaction.response.send_message(
+        "✅ Başvuru paneli gönderildi.",
+        ephemeral=True
+    )
+
 
 # =======================
 # READY
 # =======================
 @bot.event
 async def on_ready():
-    print(f"Aktif: {bot.user}")
+    try:
+        bot.add_view(PanelView())
+        await bot.tree.sync()
+        print(f"✅ Bot aktif: {bot.user}")
+    except Exception as e:
+        print(f"❌ Sync hatası: {e}")
 
-bot.run(TOKEN)
+
+# =======================
+# RUN
+# =======================
+if TOKEN is None:
+    print("❌ TOKEN bulunamadı. Ortam değişkeni olarak TOKEN ekle.")
+else:
+    bot.run(TOKEN)
