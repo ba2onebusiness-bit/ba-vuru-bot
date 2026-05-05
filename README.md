@@ -1,1 +1,1 @@
-# ba-vuru-bot
+# basvuru-bot
