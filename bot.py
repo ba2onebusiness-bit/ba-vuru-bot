@@ -8,14 +8,13 @@ TOKEN = os.getenv("TOKEN")
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# 📩 BAŞVURU KANALI (DEĞİŞTİR!)
-BASVURU_KANAL = 123456789012345678
+# :envelope_with_arrow: BAŞVURU KANALI (DEĞİŞTİR)
+BASVURU_KANAL = 1501295304530722911
 
-# 🌐 Render için web server
+# :globe_with_meridians: Render için web server
 app = Flask(__name__)
 
 @app.route("/")
@@ -28,7 +27,7 @@ def run_web():
 
 threading.Thread(target=run_web).start()
 
-# 📝 BAŞVURU FORMU
+# :pencil: FORM
 class BasvuruModal(discord.ui.Modal, title="HOOWERS Başvuru"):
     isim = discord.ui.TextInput(label="İsmin")
     yas = discord.ui.TextInput(label="Yaşın")
@@ -37,43 +36,42 @@ class BasvuruModal(discord.ui.Modal, title="HOOWERS Başvuru"):
     async def on_submit(self, interaction: discord.Interaction):
         kanal = bot.get_channel(BASVURU_KANAL)
 
-        embed = discord.Embed(
-            title="📩 Yeni Başvuru",
-            color=0x2ecc71
-        )
-
-        embed.add_field(name="👤 İsim", value=self.isim.value, inline=False)
-        embed.add_field(name="🎂 Yaş", value=self.yas.value, inline=False)
-        embed.add_field(name="📚 Deneyim", value=self.deneyim.value, inline=False)
-
+        embed = discord.Embed(title=":envelope_with_arrow: Yeni Başvuru", color=0x2ecc71)
+        embed.add_field(name=":bust_in_silhouette: İsim", value=self.isim.value, inline=False)
+        embed.add_field(name=":birthday: Yaş", value=self.yas.value, inline=False)
+        embed.add_field(name=":books: Deneyim", value=self.deneyim.value, inline=False)
         embed.set_footer(text=f"{interaction.user} | {interaction.user.id}")
 
         await kanal.send(embed=embed)
-        await interaction.response.send_message("✅ Başvurun gönderildi!", ephemeral=True)
+        await interaction.response.send_message(":white_check_mark: Başvurun gönderildi!", ephemeral=True)
 
-# 🔘 BUTON
+# :radio_button: BUTON
 class BasvuruView(discord.ui.View):
     @discord.ui.button(label="Başvuru Oluştur", style=discord.ButtonStyle.primary)
     async def basvur(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(BasvuruModal())
 
-# 📢 PANEL KOMUTU
+# :loudspeaker: PANEL KOMUTU (TEK MESAJ)
 @bot.command()
-async def panel(ctx):
+async def basvurukur(ctx):
+    # komutu yazanı sil → spam/çift görünüm engellenir
+    await ctx.message.delete()
+
     embed = discord.Embed(
-        title="HOOWERS",
-        description="**[ ALIMLAR AÇIK ]**\n\nSende kazanan tarafın yanında olmak istiyorsan başvuru oluştur!",
+        title="CADEİM",
+        description="**[ ALIMLAR AÇIK ]**\n\nBizle Olan Kazanır Tıkla Kazan!",
         color=0x2f3136
     )
 
-    # 📸 BURAYA KENDİ GÖRSELİNİ KOY
-    embed.set_image(url="https://i.imgur.com/8XhFZQp.png")
+    embed.set_image(
+        url="https://media.discordapp.net/attachments/777573115177336852/1499923963696906371/92425a4c-2a54-4acb-a58a-d91252053326.png"
+    )
 
     embed.set_footer(text="Başvuru sistemi")
 
     await ctx.send(embed=embed, view=BasvuruView())
 
-# 🤖 BOT READY
+# :robot: BOT READY
 @bot.event
 async def on_ready():
     print(f"Bot aktif: {bot.user}")
