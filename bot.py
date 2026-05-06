@@ -183,8 +183,8 @@ async def panel(interaction: discord.Interaction):
         return await interaction.response.send_message("Yetkin yok", ephemeral=True)
 
     embed = discord.Embed(
-        title="📢 Başvuru Sistemi",
-        description="Başlamak için tıkla",
+        title="📢 CADEİM Başvuru",
+        description="Her Zaman Kazanmak İçin Tıkla 😁",
         color=0x5865F2
     )
 
