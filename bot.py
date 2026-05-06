@@ -59,12 +59,55 @@ def is_admin(member: discord.Member):
     return any(r.id == ADMIN_ROLE_ID for r in member.roles)
 
 # =======================
-# TICKET CONTROL
+# TICKET VIEW
+# =======================
+class TicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Başvuru Aç", style=discord.ButtonStyle.primary)
+    async def open(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        guild = interaction.guild
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            guild.me: discord.PermissionOverwrite(view_channel=True)
+        }
+
+        # 🔥 USER ID artık topic içinde saklanıyor (EN SAĞLAM YÖNTEM)
+        channel = await guild.create_text_channel(
+            name=f"basvuru-{interaction.user.id}",
+            topic=f"APPLICANT_ID:{interaction.user.id}",
+            overwrites=overwrites
+        )
+
+        embed = discord.Embed(
+            title="📩 Başvuru Formu",
+            description="\n".join([f"{i+1}) {q}" for i, q in enumerate(QUESTIONS)]),
+            color=0x5865F2
+        )
+
+        embed.set_image(url=BANNER_URL)
+
+        await channel.send(
+            content=interaction.user.mention,
+            embed=embed,
+            view=TicketControlView()
+        )
+
+        await interaction.response.send_message(
+            f"🎫 Ticket açıldı: {channel.mention}",
+            ephemeral=True
+        )
+
+# =======================
+# CONTROL VIEW
 # =======================
 class TicketControlView(discord.ui.View):
-    def __init__(self, applicant: discord.Member):
+    def __init__(self):
         super().__init__(timeout=None)
-        self.applicant = applicant
 
     @discord.ui.button(label="KABUL", style=discord.ButtonStyle.success)
     async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -89,6 +132,32 @@ class TicketControlView(discord.ui.View):
         log = guild.get_channel(LOG_CHANNEL_ID)
 
         # =======================
+        # USER FIX (TOPIC READ)
+        # =======================
+        channel = interaction.channel
+
+        if not channel.topic or "APPLICANT_ID:" not in channel.topic:
+            return await interaction.followup.send("User bulunamadı", ephemeral=True)
+
+        user_id = int(channel.topic.split(":")[1])
+        member = await guild.fetch_member(user_id)
+
+        # =======================
+        # ROLE GIVE
+        # =======================
+        if result == "KABUL":
+
+            roles = [
+                guild.get_role(rid) for rid in KABUL_ROLLER
+            ]
+            roles = [r for r in roles if r]
+
+            try:
+                await member.add_roles(*roles, reason="Başvuru Kabul")
+            except Exception as e:
+                print("ROLE ERROR:", e)
+
+        # =======================
         # LOG
         # =======================
         embed = discord.Embed(
@@ -96,106 +165,16 @@ class TicketControlView(discord.ui.View):
             color=0x00ff00 if result == "KABUL" else 0xff0000
         )
 
-        embed.add_field(name="Aday", value=self.applicant.mention, inline=False)
-        embed.add_field(name="Kanal", value=interaction.channel.name, inline=False)
+        embed.add_field(name="Aday", value=member.mention)
 
-        # =======================
-        # ROLE SYSTEM + RETRY
-        # =======================
-        if result == "KABUL":
-
-            try:
-                member = await guild.fetch_member(self.applicant.id)
-
-                roles = [
-                    guild.get_role(rid) for rid in KABUL_ROLLER
-                ]
-                roles = [r for r in roles if r]
-
-                async def try_roles(retry=3):
-                    for i in range(retry):
-                        try:
-                            await member.add_roles(*roles, reason="Başvuru Kabul")
-
-                            # VERIFY
-                            updated = await guild.fetch_member(member.id)
-                            missing = [r for r in roles if r not in updated.roles]
-
-                            if not missing:
-                                print("✅ ROLE SUCCESS")
-                                return True
-
-                            print(f"⚠️ Retry {i+1} eksik rol tespit edildi")
-
-                        except discord.Forbidden:
-                            print("❌ ROLE HIERARCHY ERROR")
-                            return False
-                        except Exception as e:
-                            print(f"❌ ROLE ERROR {i+1}: {e}")
-
-                    return False
-
-                success = await try_roles()
-
-                if not success and log:
-                    await log.send(f"⚠️ {member.mention} rol verilemedi (retry başarısız)")
-
-            except Exception as e:
-                print("FETCH MEMBER ERROR:", e)
-
-        # =======================
-        # LOG SEND
-        # =======================
         if log:
             await log.send(embed=embed)
 
-        await interaction.message.edit(content=f"İşlem tamamlandı: {result}", view=None)
-        await interaction.channel.delete()
+        await interaction.message.edit(content=f"İşlem: {result}", view=None)
+        await channel.delete()
 
 # =======================
-# PANEL
-# =======================
-class TicketView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="Başvuru Aç", style=discord.ButtonStyle.primary)
-    async def open(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        guild = interaction.guild
-
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-            guild.me: discord.PermissionOverwrite(view_channel=True)
-        }
-
-        channel = await guild.create_text_channel(
-            name=f"basvuru-{interaction.user.id}",
-            overwrites=overwrites
-        )
-
-        embed = discord.Embed(
-            title="📩 Başvuru Formu",
-            description="\n".join([f"{i+1}) {q}" for i, q in enumerate(QUESTIONS)]),
-            color=0x5865F2
-        )
-
-        embed.set_image(url=BANNER_URL)
-
-        await channel.send(
-            content=interaction.user.mention,
-            embed=embed,
-            view=TicketControlView(interaction.user)
-        )
-
-        await interaction.response.send_message(
-            f"🎫 Ticket açıldı: {channel.mention}",
-            ephemeral=True
-        )
-
-# =======================
-# SLASH COMMAND
+# SLASH
 # =======================
 @bot.tree.command(name="basvuru-panel")
 async def panel(interaction: discord.Interaction):
@@ -204,8 +183,8 @@ async def panel(interaction: discord.Interaction):
         return await interaction.response.send_message("Yetkin yok", ephemeral=True)
 
     embed = discord.Embed(
-        title="📢 CADEİM Başvuru Sistemi",
-        description="Başlamak için butona tıkla",
+        title="📢 Başvuru Sistemi",
+        description="Başlamak için tıkla",
         color=0x5865F2
     )
 
