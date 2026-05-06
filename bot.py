@@ -53,7 +53,7 @@ QUESTIONS = [
 ]
 
 # =======================
-# ROLE CHECK
+# CHECK
 # =======================
 def is_admin(member: discord.Member):
     return any(r.id == ADMIN_ROLE_ID for r in member.roles)
@@ -76,7 +76,6 @@ class TicketView(discord.ui.View):
             guild.me: discord.PermissionOverwrite(view_channel=True)
         }
 
-        # 🔥 USER ID artık topic içinde saklanıyor (EN SAĞLAM YÖNTEM)
         channel = await guild.create_text_channel(
             name=f"basvuru-{interaction.user.id}",
             topic=f"APPLICANT_ID:{interaction.user.id}",
@@ -103,7 +102,7 @@ class TicketView(discord.ui.View):
         )
 
 # =======================
-# CONTROL VIEW
+# CONTROL
 # =======================
 class TicketControlView(discord.ui.View):
     def __init__(self):
@@ -130,10 +129,6 @@ class TicketControlView(discord.ui.View):
 
         guild = interaction.guild
         log = guild.get_channel(LOG_CHANNEL_ID)
-
-        # =======================
-        # USER FIX (TOPIC READ)
-        # =======================
         channel = interaction.channel
 
         if not channel.topic or "APPLICANT_ID:" not in channel.topic:
@@ -174,7 +169,7 @@ class TicketControlView(discord.ui.View):
         await channel.delete()
 
 # =======================
-# SLASH
+# SLASH PANEL (FIX HERE)
 # =======================
 @bot.tree.command(name="basvuru-panel")
 async def panel(interaction: discord.Interaction):
@@ -190,7 +185,15 @@ async def panel(interaction: discord.Interaction):
 
     embed.set_image(url=BANNER_URL)
 
-    await interaction.response.send_message(embed=embed, view=TicketView())
+    # 🔥 komutu yazan mesajı temizle
+    await interaction.response.send_message("Panel kuruluyor...", ephemeral=True)
+
+    try:
+        await interaction.delete_original_response()
+    except:
+        pass
+
+    await interaction.channel.send(embed=embed, view=TicketView())
 
 # =======================
 # READY
