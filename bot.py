@@ -53,13 +53,13 @@ QUESTIONS = [
 ]
 
 # =======================
-# CHECK
+# CHECK ADMIN
 # =======================
 def is_admin(member: discord.Member):
     return any(r.id == ADMIN_ROLE_ID for r in member.roles)
 
 # =======================
-# TICKET VIEW
+# PANEL VIEW
 # =======================
 class TicketView(discord.ui.View):
     def __init__(self):
@@ -102,7 +102,7 @@ class TicketView(discord.ui.View):
         )
 
 # =======================
-# CONTROL
+# TICKET CONTROL
 # =======================
 class TicketControlView(discord.ui.View):
     def __init__(self):
@@ -142,9 +142,7 @@ class TicketControlView(discord.ui.View):
         # =======================
         if result == "KABUL":
 
-            roles = [
-                guild.get_role(rid) for rid in KABUL_ROLLER
-            ]
+            roles = [guild.get_role(rid) for rid in KABUL_ROLLER]
             roles = [r for r in roles if r]
 
             try:
@@ -169,7 +167,7 @@ class TicketControlView(discord.ui.View):
         await channel.delete()
 
 # =======================
-# SLASH PANEL (FIX HERE)
+# SLASH PANEL (FULL SILENT FIX)
 # =======================
 @bot.tree.command(name="basvuru-panel")
 async def panel(interaction: discord.Interaction):
@@ -185,15 +183,15 @@ async def panel(interaction: discord.Interaction):
 
     embed.set_image(url=BANNER_URL)
 
-    # 🔥 komutu yazan mesajı temizle
-    await interaction.response.send_message("Panel kuruluyor...", ephemeral=True)
+    # 🔥 tamamen sessiz
+    await interaction.response.defer(ephemeral=True)
+
+    await interaction.channel.send(embed=embed, view=TicketView())
 
     try:
         await interaction.delete_original_response()
     except:
         pass
-
-    await interaction.channel.send(embed=embed, view=TicketView())
 
 # =======================
 # READY
