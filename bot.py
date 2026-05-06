@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import os
+import sqlite3
 
 # =======================
 # CONFIG
@@ -10,8 +11,6 @@ TOKEN = os.getenv("TOKEN")
 if not TOKEN:
     raise RuntimeError("TOKEN bulunamadı")
 
-GUILD_ID = 1461791061419622402
-LOG_CHANNEL_ID = 1499919581253472266
 ADMIN_ROLE_ID = 1461791062078001187
 
 KABUL_ROLLER = [
@@ -30,6 +29,21 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # =======================
+# DB
+# =======================
+conn = sqlite3.connect("data.db")
+cursor = conn.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS settings (
+    guild_id TEXT PRIMARY KEY,
+    log_channel_id TEXT
+)
+""")
+
+conn.commit()
+
+# =======================
 # QUESTIONS
 # =======================
 QUESTIONS = [
@@ -41,10 +55,33 @@ QUESTIONS = [
 ]
 
 # =======================
-# CHECK ADMIN
+# HELPERS
 # =======================
 def is_admin(member: discord.Member):
     return any(r.id == ADMIN_ROLE_ID for r in member.roles)
+
+def get_log_channel(guild_id: int):
+    cursor.execute("SELECT log_channel_id FROM settings WHERE guild_id = ?", (str(guild_id),))
+    result = cursor.fetchone()
+    return int(result[0]) if result else None
+
+# =======================
+# LOG SET COMMAND
+# =======================
+@bot.command()
+async def logkanal(ctx, channel: discord.TextChannel):
+
+    if not is_admin(ctx.author):
+        return await ctx.send("Yetkin yok")
+
+    cursor.execute("""
+    INSERT OR REPLACE INTO settings (guild_id, log_channel_id)
+    VALUES (?, ?)
+    """, (str(ctx.guild.id), str(channel.id)))
+
+    conn.commit()
+
+    await ctx.send(f"✅ Log kanalı ayarlandı: {channel.mention}")
 
 # =======================
 # TICKET VIEW
@@ -53,7 +90,7 @@ class TicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Başvuru Aç", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Başvur", style=discord.ButtonStyle.primary)
     async def open(self, interaction: discord.Interaction, button: discord.ui.Button):
 
         guild = interaction.guild
@@ -71,9 +108,9 @@ class TicketView(discord.ui.View):
         )
 
         embed = discord.Embed(
-            title="📩 Başvuru Formu",
+            title="📩 Başvuru",
             description="\n".join([f"{i+1}) {q}" for i, q in enumerate(QUESTIONS)]),
-            color=0x5865F2
+            color=090909
         )
 
         embed.set_image(url=BANNER_URL)
@@ -116,9 +153,11 @@ class TicketControlView(discord.ui.View):
             return await interaction.followup.send("Yetkin yok", ephemeral=True)
 
         guild = interaction.guild
-        log = guild.get_channel(LOG_CHANNEL_ID)
         channel = interaction.channel
 
+        # =======================
+        # USER GET
+        # =======================
         if not channel.topic or "APPLICANT_ID:" not in channel.topic:
             return await interaction.followup.send("User bulunamadı", ephemeral=True)
 
@@ -138,8 +177,11 @@ class TicketControlView(discord.ui.View):
                 print("ROLE ERROR:", e)
 
         # =======================
-        # LOG
+        # LOG CHANNEL (DYNAMIC)
         # =======================
+        log_id = get_log_channel(guild.id)
+        log = guild.get_channel(log_id) if log_id else None
+
         if log:
             embed = discord.Embed(
                 title=f"📁 Başvuru {result}",
@@ -152,23 +194,28 @@ class TicketControlView(discord.ui.View):
         await channel.delete()
 
 # =======================
-# AUTO PANEL (NO SLASH)
+# AUTO PANEL
 # =======================
 @bot.event
 async def on_ready():
     print(f"Bot aktif: {bot.user}")
 
-    channel = bot.get_channel(LOG_CHANNEL_ID)
+    # PANEL OTOMATİK LOG KANALINA GİDER
+    cursor.execute("SELECT log_channel_id FROM settings LIMIT 1")
+    row = cursor.fetchone()
 
-    if channel:
-        embed = discord.Embed(
-            title="📢 Başvuru Sistemi",
-            description="Başlamak için tıkla",
-            color=0x5865F2
-        )
+    if row:
+        channel = bot.get_channel(int(row[0]))
 
-        embed.set_image(url=BANNER_URL)
+        if channel:
+            embed = discord.Embed(
+                title="📢 Başvuru Sistemi",
+                description="Başlamak için tıkla",
+                color=0x5865F2
+            )
 
-        await channel.send(embed=embed, view=TicketView())
+            embed.set_image(url=BANNER_URL)
+
+            await channel.send(embed=embed, view=TicketView())
 
 bot.run(TOKEN)
