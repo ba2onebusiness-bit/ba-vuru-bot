@@ -11,8 +11,8 @@ if not TOKEN:
     raise RuntimeError("TOKEN bulunamadı")
 
 GUILD_ID = 1461791061419622402
-ADMIN_ROLE_ID = 1461791062078001187
 LOG_CHANNEL_ID = 1461791063361454291
+ADMIN_ROLE_ID = 1461791062078001187
 
 KABUL_ROLLER = [
     1461791062078001183,
@@ -27,19 +27,7 @@ BANNER_URL = "https://cdn.discordapp.com/attachments/777573115177336852/14999239
 intents = discord.Intents.default()
 intents.members = True
 
-# =======================
-# BOT
-# =======================
-class MyBot(commands.Bot):
-    def __init__(self):
-        super().__init__(command_prefix="!", intents=intents)
-
-    async def setup_hook(self):
-        guild = discord.Object(id=GUILD_ID)
-        await self.tree.sync(guild=guild)
-        print("✅ Slash sync OK")
-
-bot = MyBot()
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 # =======================
 # QUESTIONS
@@ -59,7 +47,7 @@ def is_admin(member: discord.Member):
     return any(r.id == ADMIN_ROLE_ID for r in member.roles)
 
 # =======================
-# PANEL VIEW
+# TICKET VIEW
 # =======================
 class TicketView(discord.ui.View):
     def __init__(self):
@@ -102,7 +90,7 @@ class TicketView(discord.ui.View):
         )
 
 # =======================
-# TICKET CONTROL
+# CONTROL VIEW
 # =======================
 class TicketControlView(discord.ui.View):
     def __init__(self):
@@ -141,7 +129,6 @@ class TicketControlView(discord.ui.View):
         # ROLE GIVE
         # =======================
         if result == "KABUL":
-
             roles = [guild.get_role(rid) for rid in KABUL_ROLLER]
             roles = [r for r in roles if r]
 
@@ -153,51 +140,35 @@ class TicketControlView(discord.ui.View):
         # =======================
         # LOG
         # =======================
-        embed = discord.Embed(
-            title=f"📁 Başvuru {result}",
-            color=0x00ff00 if result == "KABUL" else 0xff0000
-        )
-
-        embed.add_field(name="Aday", value=member.mention)
-
         if log:
+            embed = discord.Embed(
+                title=f"📁 Başvuru {result}",
+                color=0x00ff00 if result == "KABUL" else 0xff0000
+            )
+            embed.add_field(name="Aday", value=member.mention)
             await log.send(embed=embed)
 
         await interaction.message.edit(content=f"İşlem: {result}", view=None)
         await channel.delete()
 
 # =======================
-# SLASH PANEL (FULL SILENT FIX)
-# =======================
-@bot.tree.command(name="basvuru-panel")
-async def panel(interaction: discord.Interaction):
-
-    if not is_admin(interaction.user):
-        return await interaction.response.send_message("Yetkin yok", ephemeral=True)
-
-    embed = discord.Embed(
-        title="📢 Başvuru Sistemi",
-        description="Başlamak için tıkla",
-        color=0x5865F2
-    )
-
-    embed.set_image(url=BANNER_URL)
-
-    # 🔥 tamamen sessiz
-    await interaction.response.defer(ephemeral=True)
-
-    await interaction.channel.send(embed=embed, view=TicketView())
-
-    try:
-        await interaction.delete_original_response()
-    except:
-        pass
-
-# =======================
-# READY
+# AUTO PANEL (NO SLASH)
 # =======================
 @bot.event
 async def on_ready():
     print(f"Bot aktif: {bot.user}")
+
+    channel = bot.get_channel(LOG_CHANNEL_ID)
+
+    if channel:
+        embed = discord.Embed(
+            title="📢 Başvuru Sistemi",
+            description="Başlamak için tıkla",
+            color=0x5865F2
+        )
+
+        embed.set_image(url=BANNER_URL)
+
+        await channel.send(embed=embed, view=TicketView())
 
 bot.run(TOKEN)
