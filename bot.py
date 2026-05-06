@@ -53,7 +53,7 @@ QUESTIONS = [
 ]
 
 # =======================
-# HELPERS
+# ROLE CHECK
 # =======================
 def is_admin(member: discord.Member):
     return any(r.id == ADMIN_ROLE_ID for r in member.roles)
@@ -64,7 +64,7 @@ def is_admin(member: discord.Member):
 class TicketControlView(discord.ui.View):
     def __init__(self, applicant: discord.Member):
         super().__init__(timeout=None)
-        self.applicant = applicant  # 🔥 doğru user tracking
+        self.applicant = applicant
 
     @discord.ui.button(label="KABUL", style=discord.ButtonStyle.success)
     async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -96,31 +96,56 @@ class TicketControlView(discord.ui.View):
             color=0x00ff00 if result == "KABUL" else 0xff0000
         )
 
-        embed.add_field(
-            name="Aday",
-            value=self.applicant.mention,
-            inline=False
-        )
-
-        embed.add_field(
-            name="Kanal",
-            value=interaction.channel.name,
-            inline=False
-        )
+        embed.add_field(name="Aday", value=self.applicant.mention, inline=False)
+        embed.add_field(name="Kanal", value=interaction.channel.name, inline=False)
 
         # =======================
-        # ROLE GIVE (SAFE)
+        # ROLE SYSTEM + RETRY
         # =======================
         if result == "KABUL":
-            roles = []
-            for rid in KABUL_ROLLER:
-                role = guild.get_role(rid)
-                if role:
-                    roles.append(role)
 
-            if roles:
-                await self.applicant.add_roles(*roles, reason="Başvuru Kabul")
+            try:
+                member = await guild.fetch_member(self.applicant.id)
 
+                roles = [
+                    guild.get_role(rid) for rid in KABUL_ROLLER
+                ]
+                roles = [r for r in roles if r]
+
+                async def try_roles(retry=3):
+                    for i in range(retry):
+                        try:
+                            await member.add_roles(*roles, reason="Başvuru Kabul")
+
+                            # VERIFY
+                            updated = await guild.fetch_member(member.id)
+                            missing = [r for r in roles if r not in updated.roles]
+
+                            if not missing:
+                                print("✅ ROLE SUCCESS")
+                                return True
+
+                            print(f"⚠️ Retry {i+1} eksik rol tespit edildi")
+
+                        except discord.Forbidden:
+                            print("❌ ROLE HIERARCHY ERROR")
+                            return False
+                        except Exception as e:
+                            print(f"❌ ROLE ERROR {i+1}: {e}")
+
+                    return False
+
+                success = await try_roles()
+
+                if not success and log:
+                    await log.send(f"⚠️ {member.mention} rol verilemedi (retry başarısız)")
+
+            except Exception as e:
+                print("FETCH MEMBER ERROR:", e)
+
+        # =======================
+        # LOG SEND
+        # =======================
         if log:
             await log.send(embed=embed)
 
@@ -128,7 +153,7 @@ class TicketControlView(discord.ui.View):
         await interaction.channel.delete()
 
 # =======================
-# PANEL VIEW
+# PANEL
 # =======================
 class TicketView(discord.ui.View):
     def __init__(self):
