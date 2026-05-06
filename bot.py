@@ -143,7 +143,7 @@ class TicketControlView(discord.ui.View):
         if log:
             embed = discord.Embed(
                 title=f"📁 Başvuru {result}",
-                color=0x00ff00 if result == "KABUL" else 0xff0000
+                color=090909 if result == "KABUL" else 0xff0000
             )
             embed.add_field(name="Aday", value=member.mention)
             await log.send(embed=embed)
@@ -164,7 +164,7 @@ async def on_ready():
         embed = discord.Embed(
             title="📢 Kazanmak için başvur 😁",
             description="Başlamak için tıkla",
-            color=0x5865F2
+            color=090909
         )
 
         embed.set_image(url=BANNER_URL)
