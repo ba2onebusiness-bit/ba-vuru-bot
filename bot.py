@@ -15,37 +15,30 @@ GUILD_ID = 1461791061419622402
 ADMIN_ROLE_ID = 1461791062078001187
 LOG_CHANNEL_ID = 1461791063361454291
 
+# 🎯 KABUL ROLLERİ (2 adet)
+KABUL_ROLLER = [
+    1461791062078001183,
+    1461791062027665509
+]
+
+BANNER_URL = "https://media.discordapp.net/attachments/777573115177336852/1499923963696906371/92425a4c-2a54-4acb-a58a-d91252053326.png"
+
 # =======================
 # INTENTS
 # =======================
 intents = discord.Intents.default()
 intents.members = True
 
-# =======================
-# BOT CLASS
-# =======================
-class Bot(commands.Bot):
+class MyBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
-
         guild = discord.Object(id=GUILD_ID)
+        await self.tree.sync(guild=guild)
+        print("✅ Slash sync OK")
 
-        # 🔥 GLOBAL + GUILD DOUBLE SYNC (100% garanti fix)
-        try:
-            await self.tree.sync(guild=guild)
-            print("✅ Guild slash sync OK")
-        except Exception as e:
-            print("Guild sync error:", e)
-
-        try:
-            await self.tree.sync()
-            print("🌍 Global slash sync OK")
-        except Exception as e:
-            print("Global sync error:", e)
-
-bot = Bot()
+bot = MyBot()
 
 # =======================
 # DB
@@ -61,11 +54,6 @@ CREATE TABLE IF NOT EXISTS applications (
 )
 """)
 conn.commit()
-
-# =======================
-# ACTIVE TICKETS
-# =======================
-active_tickets = set()
 
 # =======================
 # QUESTIONS
@@ -86,57 +74,7 @@ def get_count(user_id: str):
     return cursor.fetchone()[0]
 
 # =======================
-# TICKET VIEW
-# =======================
-class TicketView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="Başvuru Aç", style=discord.ButtonStyle.primary)
-    async def open(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        if interaction.user.id in active_tickets:
-            return await interaction.response.send_message(
-                "❌ Zaten aktif başvurun var!",
-                ephemeral=True
-            )
-
-        active_tickets.add(interaction.user.id)
-
-        count = get_count(str(interaction.user.id))
-
-        overwrites = {
-            interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-            interaction.guild.me: discord.PermissionOverwrite(view_channel=True)
-        }
-
-        channel = await interaction.guild.create_text_channel(
-            name=f"basvuru-{interaction.user.name}".lower(),
-            overwrites=overwrites
-        )
-
-        embed = discord.Embed(
-            title="📩 Başvuru Formu",
-            description="\n".join([f"{i+1}) {q}" for i, q in enumerate(QUESTIONS)]),
-            color=0x5865F2
-        )
-
-        embed.add_field(
-            name="📊 Önceki Başvurular",
-            value=str(count),
-            inline=False
-        )
-
-        await channel.send(content=interaction.user.mention, embed=embed, view=TicketControlView())
-
-        await interaction.response.send_message(
-            f"🎫 Ticket açıldı: {channel.mention}",
-            ephemeral=True
-        )
-
-# =======================
-# ADMIN VIEW
+# TICKET CONTROL
 # =======================
 class TicketControlView(discord.ui.View):
     def __init__(self):
@@ -152,8 +90,6 @@ class TicketControlView(discord.ui.View):
 
     @discord.ui.button(label="KAPAT", style=discord.ButtonStyle.secondary)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        active_tickets.discard(interaction.user.id)
         await interaction.channel.delete()
 
     async def finish(self, interaction, result: str):
@@ -174,15 +110,79 @@ class TicketControlView(discord.ui.View):
             color=0x00ff00 if result == "KABUL" else 0xff0000
         )
 
-        embed.add_field(name="Cevaplar", value=content[:1000] or "Boş")
+        embed.add_field(name="Cevaplar", value=content[:1000] or "Boş", inline=False)
+
+        # =======================
+        # KABUL = 2 ROL VER
+        # =======================
+        if result == "KABUL":
+            member = interaction.guild.get_member(int(channel.name.split("-")[-1])) or None
+
+            # fallback: channel owner bulma
+            async for msg in channel.history(limit=1, oldest_first=True):
+                member = msg.author
+
+            if member:
+                roles = []
+                for rid in KABUL_ROLLER:
+                    role = interaction.guild.get_role(rid)
+                    if role:
+                        roles.append(role)
+
+                if roles:
+                    await member.add_roles(*roles)
 
         if log:
             await log.send(embed=embed)
 
-        active_tickets.discard(channel.topic or 0)
-
         await interaction.response.send_message("Kapatılıyor...", ephemeral=True)
         await channel.delete()
+
+# =======================
+# TICKET VIEW
+# =======================
+class TicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Başvuru", style=discord.ButtonStyle.primary)
+    async def open(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        count = get_count(str(interaction.user.id))
+
+        overwrites = {
+            interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            interaction.guild.me: discord.PermissionOverwrite(view_channel=True)
+        }
+
+        channel = await interaction.guild.create_text_channel(
+            name=f"basvuru-{interaction.user.id}",
+            overwrites=overwrites
+        )
+
+        embed = discord.Embed(
+            title="📩 Başvuru Formu",
+            description="\n".join([f"{i+1}) {q}" for i, q in enumerate(QUESTIONS)]),
+            color=0x5865F2
+        )
+
+        embed.add_field(
+            name="📊 Toplam Başvuruların",
+            value=str(count),
+            inline=False
+        )
+
+        await channel.send(
+            content=interaction.user.mention,
+            embed=embed,
+            view=TicketControlView()
+        )
+
+        await interaction.response.send_message(
+            f"🎫 Ticket açıldı: {channel.mention}",
+            ephemeral=True
+        )
 
 # =======================
 # SLASH COMMAND
@@ -194,10 +194,12 @@ async def panel(interaction: discord.Interaction):
         return await interaction.response.send_message("Yetkin yok", ephemeral=True)
 
     embed = discord.Embed(
-        title="📢 MD Başvuru Sistemi",
-        description="Başvurmak için butona tıkla",
+        title="📢 CADEİM Başvuru",
+        description="Kazanan tarafta olmak için aşağıdaki butona tıkla 😁",
         color=0x5865F2
     )
+
+    embed.set_image(url=BANNER_URL)
 
     await interaction.response.send_message(embed=embed, view=TicketView())
 
@@ -207,6 +209,5 @@ async def panel(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     print(f"Bot aktif: {bot.user}")
-    print("Slash commands ready!")
 
 bot.run(TOKEN)
